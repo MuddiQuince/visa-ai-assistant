@@ -9,7 +9,7 @@ HOW TO LAUNCH:
 2. The Quick Start (Docker)
 The easiest way to get both the Frontend and Backend running simultaneously:
 
-```powershell
+(in powershell)
 # Build and start the containers
 docker-compose up --build
 
