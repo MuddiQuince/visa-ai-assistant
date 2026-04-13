@@ -1,0 +1,14 @@
+//Creating a test payload JSON to run a cURL command against the Flask server 
+{
+  "clientSequence": "I'm American and currently in Bali. Can I apply from Indonesia?",
+  "chatHistory": [
+    {
+      "role": "client",
+      "message": "Hello, I'm interested in the DTV visa for Thailand. I work remotely as a software developer for a US company."
+    },
+    {
+      "role": "consultant",
+      "message": "Hi there! Thank you for reaching out. The DTV is perfect for remote workers like yourself. May I know your nationality and which country you'd like to apply from?"
+    }
+  ]
+}
