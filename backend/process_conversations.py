@@ -1,16 +1,21 @@
-import json
-import os
-import sys
-import requests
-from dotenv import load_dotenv
+import json #library for Data Structure conversion (String <--> List/Dictionary)
+import os #interface for OS level String retrieval (env Variables) 
+import sys #system-level parameters and IO reconfiguration
+import requests #library for HTTP Data Dtructure transport (JSON over the wire) 
+from dotenv import load_dotenv #utility to populate the os.environ (Dictionary) 
 import google.generativeai as genai
 
-
+#Data Structure: IO Stream: ensures terminal handles UTF-8 (multibyte symbol) 
+# characters without crashing
 sys.stdout.reconfigure(encoding='utf-8')
 
+#DS: internal Dictionary 
+#reads .env file and updates os.environ mapping
 load_dotenv()
 
 def get_system_prompt_in_db():
+    #DS: String 
+    #acesses values from os.environ Dictionary [O(1) lookup time]
     url = os.environ.get("SUPABASE_URL", "").strip()
     key = os.environ.get("SUPABASE_KEY", "").strip()
     
@@ -19,6 +24,8 @@ def get_system_prompt_in_db():
         
     # PostgREST headers for Supabase API access
     try:
+        #DS: Dictionary 
+        #used to store HTTP Metadata, key-value pairs for authentication 
         headers = {
             "apikey": key,
             "Authorization": f"Bearer {key}",
@@ -26,6 +33,8 @@ def get_system_prompt_in_db():
         }
 
         # Query 'Settings' table where key --> 'system_prompt'
+        #DS: Dynamic String 
+        #build URL endpoint 
         safe_url = url.rstrip('/')
         endpoint = f"{safe_url}/rest/v1/Settings?key=eq.system_prompt&select=value"
         
@@ -33,7 +42,11 @@ def get_system_prompt_in_db():
         response = requests.get(endpoint, headers=headers)
         
         if response.status_code == 200:
+            #DS: List of Dictionaries 
+            #Supabase returns JSON, parsed into Python DS
             data = response.json()
+            #length check on List [O(1)]
+            #Dictionary look-up [O(1)]
             if data and len(data) > 0:
                 return data[0].get('value', "You are an AI assistant.")
     except Exception as e:
@@ -42,6 +55,8 @@ def get_system_prompt_in_db():
     return "You are an AI assistant."
 
 def update_system_prompt_in_db(new_prompt_text):
+    #DS: Dictionary 
+    #specific headers required for REST PATCH operations 
     url = os.environ.get("SUPABASE_URL", "").strip()
     key = os.environ.get("SUPABASE_KEY", "").strip()
     
@@ -57,6 +72,8 @@ def update_system_prompt_in_db(new_prompt_text):
     endpoint = f"{safe_url}/rest/v1/Settings?key=eq.system_prompt"
     
     try:
+        #DS: Dictionary 
+        #'json=' param turns python Dictionary --> JSON string 
         # new_prompt_text is DEFINED here because it's in the (parentheses) above
         response = requests.patch(endpoint, headers=headers, json={"value": new_prompt_text})
         
@@ -72,45 +89,65 @@ def update_system_prompt_in_db(new_prompt_text):
 
 
 def process_conversations(filepath):
+    #opens files stream in File IO 
     with open(filepath, 'r', encoding='utf-8') as f:
+        #DS: List 
+        #loads entire JSON array into memory of O(N) space complexity 
         data = json.load(f)
 
+    #DS: List
+    #store "Result Set" of interaction objects 
     all_interactions = []
 
+    #iteration (visiting each conversation dictionary) O(N) time 
     for conv in data:
         contact_id = conv.get('contact_id')
         scenario = conv.get('scenario')
         messages = conv.get('conversation', [])
-        
+        #DS: list of message Dictionaries 
+
+        #DS: Stack-like List 
+        #grows as we move through the convo 
         history = []
         i = 0
+        #Linear scan O(M) (M = messages in 1 convo)
         while i < len(messages):
             msg = messages[i]
-            
+
+            #branching based on msg 'direction' key 
             if msg.get('direction') == 'in':
+                #DS: List 
+                #temporary buffer for contiguous client messages 
                 # Start of a client sequence
                 client_sequence = []
+                #nested while groups in messages, i still moves forward O(M) time 
                 while i < len(messages) and messages[i].get('direction') == 'in':
                     client_sequence.append(messages[i])
                     i += 1
-                
+
+                #DS: List 
+                #temporary buffer for consultant reply 
                 # Following consultant sequence reply
                 consultant_sequence = []
                 while i < len(messages) and messages[i].get('direction') == 'out':
                     consultant_sequence.append(messages[i])
                     i += 1
-                
+
+                #DS: Dictionary 
                 # Append to our list of interactions
                 interaction = {
                     'contact_id': contact_id,
                     'scenario': scenario,
+                    #DS: List copy 
+                    #creates snapshot (shallow copy) of history so no crash O(K) time 
                     'history': list(history),
                     'client_sequence': client_sequence,
                     'consultant_sequence': consultant_sequence
                 }
+                #append to result list O(1) time 
                 all_interactions.append(interaction)
                 
-                # Add these sequences to history for the next iteration
+                # Add these sequences to history for the next iteration O(K) 
                 history.extend(client_sequence)
                 history.extend(consultant_sequence)
             else:
@@ -121,10 +158,15 @@ def process_conversations(filepath):
     return all_interactions
 
 def format_history(history_messages):
+    #DS: List of Strings 
+    #gathering strings before joining 
     formatted = []
     for msg in history_messages:
         role = "(CLIENT)" if msg['direction'] == 'in' else "(CONSULTANT)"
         formatted.append(f"{role} {msg['text']}")
+    #DS: String 
+    #.join is O(N) (N = total character count) 
+    #'.join' better than '+=' since O(N) better than O(N^2)
     return "\n".join(formatted)
 
 def format_client_message(client_sequence):
@@ -134,6 +176,8 @@ def format_client_message(client_sequence):
     return "\n".join(formatted)
 
 def generate_ai_reply(client_history_str, client_message_str, system_prompt_template=None):
+    #DS: String 
+    #building prompt through string interpolation 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         print("Error: GEMINI_API_KEY is missing")
@@ -143,7 +187,8 @@ def generate_ai_reply(client_history_str, client_message_str, system_prompt_temp
 
     # Use a safe fallback for history
     history_val = client_history_str if client_history_str else "(No previous history)"
-    
+
+    #DS: Multiline String (instruction set for LLM)
     # Building detailed prompt for Gemini
     # Force strict JSON instructions
     prompt = f"""{system_prompt_template if system_prompt_template else "You are a helpful visa assistant."}
@@ -168,10 +213,14 @@ IMPORTANT: You must respond ONLY with a valid JSON object in this format:
         if not response or not response.text:
             return {"reply": "The AI could not generate a response."}
 
+        #DS: String Manipulation 
+        #strips whitespace & markdown characters 
         reply_text = response.text.strip()
         
         # Clean up Markdown (Gemini often wraps JSON in ```json blocks)
         if "```" in reply_text:
+            #string split O(N) 
+            #acess index[1] of resulting list 
             reply_text = reply_text.split("```")[1]
             # Convert string response into a Python Dictionary
             if reply_text.startswith("json"):
@@ -179,6 +228,7 @@ IMPORTANT: You must respond ONLY with a valid JSON object in this format:
         
         # Try to parse the JSON
         try:
+            #convert AI string -> Python Dictionary DS 
             parsed = json.loads(reply_text.strip())
             # Ensure the 'reply' key exists
             if "reply" in parsed:
@@ -187,6 +237,8 @@ IMPORTANT: You must respond ONLY with a valid JSON object in this format:
                 # If AI sent {"message": "hi"}, convert it to {"reply": "hi"}
                 return {"reply": str(next(iter(parsed.values())))}
         except json.JSONDecodeError:
+            #DS: Dictionary
+            #fallback to ensure ensure API consistency 
             # If parsing fails, just wrap the raw text to avoid the 500 error
             return {"reply": reply_text}
 
@@ -252,8 +304,11 @@ Return ONLY valid JSON in the following format:
         
     return existing_prompt
 
+#main execution loop 
 def main():
     filepath = 'conversations.json'
+    #DS: List of Dictionaries 
+    #output of processing logic 
     interactions = process_conversations(filepath)
     
     print(f"Total extracted interactions: {len(interactions)}\n")
@@ -265,7 +320,8 @@ def main():
     
     if not interactions:
         return
-        
+
+    #DS: Slice / Selection (picking specific indices for testing 
     # samples:
     # 1. very first interaction (usually no history)
     # 2. interaction with some history to show the full context
@@ -296,6 +352,7 @@ def main():
             # get the real consultant reply from sample['consultant_sequence']
             # run the editor, update the prompt locally and in DB.
             if sample['consultant_sequence']:
+                #print to stdout 
                 formatted_real_reply = format_client_message(sample['consultant_sequence'])
                 
                 print("\nREAL CONSULTANT REPLY:")
