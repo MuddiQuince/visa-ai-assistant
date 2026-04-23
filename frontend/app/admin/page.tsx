@@ -3,24 +3,41 @@
 "use client"; //Client Component to allow hooks like useState and useEffect
 import { useState, useEffect } from "react";
 
+//DS: Interface (TypeScript), defines shape of data 
+//ensures type safety so users don't accidentally read 'log.message' when backend actually sends 'log.text'
 interface ChatLog {
   role: string;
   text: string;
 }
 
+//---state management (memory allocation)--- 
 export default function AdminDashboard() {
-  //state for text area input
+  
+  //DS: String
+  //tracks live text inside training textarea
   const [feedback, setFeedback] = useState("");
+  
+  //DS: String, for UI feedback loops 
   //state for visual status message (ex: 'Improving AI logic.."")
+  //improves UX, lets admin know netwrok request is 'in process'
   const [status, setStatus] = useState("AI is currently using standard rules.");
+  
+  //DS: Array of objects (ChatLog[] type) O(N) (N = num of logs)
   //state to store array of msgs fetched from Flask backend
+  //ordered list to show convo chronological 
   const [logs, setLogs] = useState<ChatLog[]>([]); // State to hold chat history
 
+  //---Logic Blocks (algorithms & network IO)---
+  
   //1. Fetch latest live logs from Flask backend
   const fetchLogs = async () => {
     try {
+      //network request (GET) O(network latency) 
       const response = await fetch("http://localhost:5000/get-logs"); // Ensure this endpoint exists in Flask
+      //converts JSON string --> JS Object 
       const data = await response.json();
+
+      //state update, use OR to provide fallback empty list if 'data.history' is null to prevent undefined crashes 
       //update state with history from backend, default to empty array if NULL
       setLogs(data.history || []);
     } catch (err) {
@@ -28,30 +45,44 @@ export default function AdminDashboard() {
     }
   };
 
+  //---Lifecycle Management---
+
+  //useEffect Hook for performing 'side effects' (network requests/timers) 
   //Runs once when page loads 
   useEffect(() => {
+    //1. initial fetch, get data asa the component mounts O(1)
     fetchLogs();
+
+    //2. DS: Interval Timer 
     //request fresh logs every 5 secs to simulate 'live; feed
     const interval = setInterval(fetchLogs, 5000); // Auto-refresh every 5 seconds
-    //cleanup function: stops timer when user leaves
+
+    //3. cleanup function: stops timer when user leaves, otherwise creates a 'zombie process'
     return () => clearInterval(interval);
   }, []);
 
   //Handles "Push Update" button
   const handleImprove = async () => {
+    //O(1) validation 
     if (!feedback.trim()) return alert("Please enter an instruction.");
-    
+
+    //set UI 'loading' state 
     setStatus("Improving AI logic...");
+    
     try {
+      //DS: Dictionary/Object, sending instruct to backend 
       //POST the manual instructions to the backend
       const response = await fetch("http://localhost:5000/improve-ai-manually", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ instructions: feedback })
       });
+      
       const data = await response.json();
+      
       if(response.ok){
-        //Show success message and a snippet of the new prompt
+        //string slicing O(K)
+        //Show success message and a snippet of the new prompt to keep UI clean 
         setStatus("Success! New Prompt: " + (data.updatedPrompt?.substring(0, 50) || "Updated") + "...");
         setFeedback(""); // Clear input after success
       }
@@ -59,6 +90,8 @@ export default function AdminDashboard() {
       setStatus("Error updating AI logic.");
     }
   };
+
+  //---UI Structure---
 
   return (
     <div className="flex h-screen bg-gray-100">
